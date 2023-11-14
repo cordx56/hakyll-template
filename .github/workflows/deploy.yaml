@@ -46,7 +46,7 @@ jobs:
     needs: publish
     runs-on: ubuntu-latest
     container:
-      image: ${{ env.REGISTRY }}/${{ github.repository }}:main
+      image: ghcr.io/${{ github.repository }}:main
       volumes:
         - ./:/app
     steps:
