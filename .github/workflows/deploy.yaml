@@ -5,53 +5,35 @@ on:
     branches:
       - main
 
-env:
-  REGISTRY: ghcr.io
-
 jobs:
-  publish:
-    name: Build and publish Docker image
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}
-
-      - name: Setup buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   build:
-    needs: publish
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ github.repository }}:main
-      volumes:
-        - ./:/app
     steps:
       - uses: actions/checkout@v4
-      - run: /site build
+
+      - id: setup
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.4
+          cabal-update: true
+      - id: cache
+        uses: actions/cache/restore@v3
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: cabal-${{ hashFiles('**/*.cabal') }}
+
+      - run: cabal install --only-dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+
+      - uses: actions/cache/save@v3
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - run: cabal install
+      - run: site build
+
       - uses: actions/upload-pages-artifact@v2
         with:
           path: dist
