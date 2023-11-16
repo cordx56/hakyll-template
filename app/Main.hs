@@ -39,9 +39,9 @@ main = hakyllWith conf $ do
     compile $ do
       posts <- recentFirst =<< loadAll pattern
       let ctx =
-            constField "title" title `mappend`
-            listField "posts" (postCtx tags) (return posts) `mappend`
-            defCtx
+            constField "title" title
+              `mappend` listField "posts" (postCtx tags) (return posts)
+              `mappend` defCtx
       makeItem ""
         >>= loadAndApplyTemplate "templates/post-list.html" ctx
         >>= loadAndApplyTemplate "templates/post.html" ctx
@@ -66,13 +66,19 @@ main = hakyllWith conf $ do
       let ctx = postCtx tags
           recentPosts = take 5 posts
           indexCtx =
-            listField "posts" ctx (return recentPosts) `mappend`
-            field "tags" (\_ -> renderTagList tags) `mappend`
-            defCtx
+            listField "posts" ctx (return recentPosts)
+              `mappend` field "tags" (\_ -> renderTagList tags)
+              `mappend` defCtx
 
       getResourceBody
         >>= applyAsTemplate indexCtx
         >>= loadAndApplyTemplate "templates/base.html" indexCtx
+
+  match "**.md" $ do
+    route $ setExtension "html"
+    compile
+      $ pandocCompiler
+      >>= loadAndApplyTemplate "templates/base.html" defCtx
 
   match "templates/*" $ compile templateBodyCompiler
 
