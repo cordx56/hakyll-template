@@ -18,43 +18,61 @@ conf =
 postsPattern :: Pattern
 postsPattern = "posts/**"
 
-ctx :: Context String
-ctx = constField "siteTitle" "Bibliotheca ex Machina" `mappend` defaultContext
+defCtx :: Context String
+defCtx = constField "siteTitle" "Bibliotheca ex Machina" `mappend` defaultContext
 
 --------------------------------------------------------------------------------
 main :: IO ()
 main = hakyllWith conf $ do
+  tags <- buildTags postsPattern (fromCapture "tags/*.html")
   match postsPattern $ do
+    let ctx = postCtx tags
     route $ setExtension "html"
     compile
       $ pandocCompiler
-      >>= loadAndApplyTemplate "templates/post.html" postCtx
-      >>= loadAndApplyTemplate "templates/base.html" postCtx
-  -- >>= relativizeUrls
+      >>= loadAndApplyTemplate "templates/post.html" ctx
+      >>= loadAndApplyTemplate "templates/base.html" ctx
+
+  tagsRules tags $ \tag pattern -> do
+    let title = "Tag: " ++ tag
+    route idRoute
+    compile $ do
+      posts <- recentFirst =<< loadAll pattern
+      let ctx =
+            constField "title" title `mappend`
+            listField "posts" (postCtx tags) (return posts) `mappend`
+            defCtx
+      makeItem ""
+        >>= loadAndApplyTemplate "templates/post-list.html" ctx
+        >>= loadAndApplyTemplate "templates/post.html" ctx
+        >>= loadAndApplyTemplate "templates/base.html" ctx
 
   create ["archive.html"] $ do
     route idRoute
     compile $ do
       posts <- recentFirst =<< loadAll postsPattern
-      let archiveCtx = listField "posts" postCtx (return posts) `mappend` ctx
+      let ctx = postCtx tags
+          archiveCtx = listField "posts" ctx (return posts) `mappend` defCtx
 
       getResourceBody
         >>= applyAsTemplate archiveCtx
         -- >>= loadAndApplyTemplate "templates/archive.html" archiveCtx
         >>= loadAndApplyTemplate "templates/base.html" archiveCtx
-  -- >>= relativizeUrls
 
   create ["index.html"] $ do
     route idRoute
     compile $ do
       posts <- recentFirst =<< loadAll postsPattern
-      let recentPosts = take 5 posts
-          indexCtx = listField "posts" postCtx (return recentPosts) `mappend` ctx
+      let ctx = postCtx tags
+          recentPosts = take 5 posts
+          indexCtx =
+            listField "posts" ctx (return recentPosts) `mappend`
+            field "tags" (\_ -> renderTagList tags) `mappend`
+            defCtx
 
       getResourceBody
         >>= applyAsTemplate indexCtx
         >>= loadAndApplyTemplate "templates/base.html" indexCtx
-  -- >>= relativizeUrls
 
   match "templates/*" $ compile templateBodyCompiler
 
@@ -63,8 +81,8 @@ main = hakyllWith conf $ do
     compile copyFileCompiler
 
 --------------------------------------------------------------------------------
-postCtx :: Context String
-postCtx = ctx
+postCtx :: Tags -> Context String
+postCtx tags = tagsField "tags" tags `mappend` defCtx
 
 -- dateField "date" "%B %e, %Y"
 --  `mappend` defaultContext
