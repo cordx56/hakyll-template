@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - run: apt update && apt install -y libpango-1.0-0 libcairo2
+      - run: sudo apt update && sudo apt install -y libpango-1.0-0 libcairo2
 
       - uses: actions/checkout@v4
 
