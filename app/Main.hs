@@ -38,8 +38,7 @@ main = hakyllWith conf $ do
   match postsPattern $ do
     route $ setExtension "html"
     compile $ do
-      underlying <- getUnderlying
-      route <- getRoute underlying
+      route <- getRoute =<< getUnderlying
       let url = fmap toUrl route
           baseCtx = postCtx tags
           ctx = case url of
