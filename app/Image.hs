@@ -2,51 +2,60 @@
 
 module Image where
 
-import Diagrams.Backend.Cairo
-import Diagrams.Backend.SVG
-import Diagrams.Prelude
-import qualified Graphics.SVGFonts as F
-import qualified Graphics.SVGFonts.Wrap as FW
+import Codec.Picture (PixelRGBA8 (..), writePng)
+import Graphics.Rasterific
+import Graphics.Rasterific.Texture
+import Graphics.Text.TrueType
 
-blackColor = sRGB (17 / 255) (17 / 255) (17 / 255)
-whiteColor = sRGB (204 / 255) (204 / 255) (204 / 255)
-redColor = sRGB (204 / 255) (34 / 255) (34 / 255)
+blackColor = PixelRGBA8 17 17 17 255
+whiteColor = PixelRGBA8 204 204 204 255
+redColor = PixelRGBA8 204 34 34 255
 
-imageWidth :: Double
-imageWidth = 1024
-imageHeight = 512
+imageWidth = 1024 :: Float
+imageHeight = 512 :: Float
 margin = 20
-textHeight = 128
+textHeight = 64
+dpi = 300
 
-removeHyphen :: String -> String
-removeHyphen "" = ""
-removeHyphen s = case last s of
-  '-' -> init s
-  _ -> s
+drawTextRawPoint font x y pointSize color text =
+  withTexture (uniformTexture color)
+    $ printTextAt font pointSize (V2 x y) text
 
-pageTitleStylize text = text # fc whiteColor # lw none
-siteTitleStylize text = text # fc redColor # lw none
-
-drawText de stylize text =
-  stylize
-    $ vcat
-    $ map ((# centerX) . F.set_envelope . F.fit_height textHeight . F.svgText de) texts
+textSplitHead :: Font -> Dpi -> PointSize -> Float -> String -> (String, String)
+textSplitHead font dpi pointSize maxWidth text =
+  if maxWidth < currentWidth
+    then (ns, remain ++ [last text])
+    else (text, "")
  where
-  texts = case FW.wrapText de textHeight splits text of
-    Just texts -> map removeHyphen texts
-    Nothing -> map return text
+  getBoundingBox = stringBoundingBox font dpi pointSize
+  currentBounding = getBoundingBox text
+  currentWidth = _xMax currentBounding - _xMin currentBounding
+  (ns, remain) = textSplitHead font dpi pointSize maxWidth (init text)
 
-  splits =
-    [ (FW.splitAtSpaces, (imageWidth - textHeight * 3, imageWidth - textHeight))
-    , (FW.splitEachTwoChars, (imageWidth - textHeight * 3, imageWidth - textHeight))
-    , (const Nothing, (-1, 1 / 0))
-    ]
+textSplit :: Font -> Dpi -> PointSize -> Float -> String -> [String]
+textSplit font dpi pointSize maxWidth text = "a"
 
-draw de siteTitle pqgeTitle =
-  (drawText de pageTitleStylize pqgeTitle # centerY # translateY (textHeight / 2))
-    `atop` (drawText de siteTitleStylize siteTitle # translateY (-1 * imageHeight / 2 + margin + textHeight / 2))
-    `atop` (rect imageWidth imageHeight # fc blackColor # lc blackColor)
+textSplitAndBoundingBox :: Font -> Dpi -> PointSize -> Float -> String
+textSplitAndBoundingBox font dpi pointSize maxWidth text =
+  textSplitAndBoundingBox
+ where
+  getBoundingBox = stringBoundingBox font dpi pointSize
 
-generate fp siteTitle pageTitle = do
-  font <- F.loadFont "fonts/noto.svg"
-  renderCairo fp (dims2D imageWidth imageHeight) (draw def{F.textFont = font} siteTitle pageTitle)
+drawText font x y size color text =
+  drawTextRawPoint font (x - offsetX) (y + offsetY) pointSize color text
+ where
+  pointSize = pixelSizeInPointAtDpi textHeight dpi
+  getBoundingBox = stringBoundingBox font dpi pointSize
+  offsetX = (_xMax boundingBox - _xMin boundingBox) / 2
+  offsetY = (_yMax boundingBox - _yMin boundingBox) / 2
+
+draw font siteTitle pageTitle =
+  renderDrawingAtDpi (round imageWidth) (round imageHeight) dpi blackColor $ do
+    drawText font (imageWidth / 2) (imageHeight / 2 - textHeight / 2) textHeight whiteColor pageTitle
+    drawText font (imageWidth / 2) (imageHeight - margin - textHeight) textHeight redColor siteTitle
+
+generate fontFp siteTitle pageTitle fp = do
+  fontErr <- loadFontFile fontFp
+  case fontErr of
+    Left err -> error err
+    Right font -> writePng fp $ draw font siteTitle pageTitle
