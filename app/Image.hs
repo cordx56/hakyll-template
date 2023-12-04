@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module Image where
 
 import Codec.Picture (PixelRGBA8 (..), writePng)
@@ -14,6 +12,7 @@ redColor = PixelRGBA8 204 34 34 255
 imageWidth = 1024 :: Float
 imageHeight = 512 :: Float
 margin = 20
+lineMargin = 10
 textHeight = 64
 dpi = 300
 
@@ -21,8 +20,8 @@ drawTextRawPoint font x y pointSize color text =
   withTexture (uniformTexture color)
     $ printTextAt font pointSize (V2 x y) text
 
-textSplitHead :: Font -> Dpi -> PointSize -> Float -> String -> (String, String)
-textSplitHead font dpi pointSize maxWidth text =
+splitTextHead :: Font -> Dpi -> PointSize -> Float -> String -> (String, String)
+splitTextHead font dpi pointSize maxWidth text =
   if maxWidth < currentWidth
     then (ns, remain ++ [last text])
     else (text, "")
@@ -30,25 +29,42 @@ textSplitHead font dpi pointSize maxWidth text =
   getBoundingBox = stringBoundingBox font dpi pointSize
   currentBounding = getBoundingBox text
   currentWidth = _xMax currentBounding - _xMin currentBounding
-  (ns, remain) = textSplitHead font dpi pointSize maxWidth (init text)
+  (ns, remain) = splitTextHead font dpi pointSize maxWidth (init text)
 
-textSplit :: Font -> Dpi -> PointSize -> Float -> String -> [String]
-textSplit font dpi pointSize maxWidth text = "a"
-
-textSplitAndBoundingBox :: Font -> Dpi -> PointSize -> Float -> String
-textSplitAndBoundingBox font dpi pointSize maxWidth text =
-  textSplitAndBoundingBox
+splitText :: Font -> Dpi -> PointSize -> Float -> String -> [String]
+splitText font dpi pointSize maxWidth =
+  split []
  where
-  getBoundingBox = stringBoundingBox font dpi pointSize
+  splitHead = splitTextHead font dpi pointSize maxWidth
+  split texts [] = texts
+  split texts remain = split (texts ++ [newH]) newRemain
+   where
+    (newH, newRemain) = splitHead remain
 
-drawText font x y size color text =
-  drawTextRawPoint font (x - offsetX) (y + offsetY) pointSize color text
+drawText font x y size color text = do
+  draw 0 splitted
  where
   pointSize = pixelSizeInPointAtDpi textHeight dpi
   getBoundingBox = stringBoundingBox font dpi pointSize
-  offsetX = (_xMax boundingBox - _xMin boundingBox) / 2
-  offsetY = (_yMax boundingBox - _yMin boundingBox) / 2
+  width boundingBox = _xMax boundingBox - _xMin boundingBox
+  height boundingBox = _yMax boundingBox - _yMin boundingBox
+  offsetX boundingBox = width boundingBox / 2
+  offsetY boundingBox = height boundingBox / 2
 
+  splitted = splitText font dpi pointSize (imageWidth - margin * 6) text
+  boundingBoxes = map getBoundingBox splitted
+  lineMarginSum = lineMargin * (fromIntegral $ length splitted - 1 :: Float)
+  heightSum = sum (map height boundingBoxes) + lineMarginSum
+  offsetSumY = heightSum / 2
+
+  draw currentHeight (t : ts) =
+    drawTextRawPoint font (x - offsetX boundingBox) (y - offsetSumY + currentHeight + offsetY boundingBox) pointSize color t
+      >> draw (currentHeight + height boundingBox + lineMargin) ts
+   where
+    boundingBox = getBoundingBox t
+  draw _ [] = return ()
+
+-- Draw titles
 draw font siteTitle pageTitle =
   renderDrawingAtDpi (round imageWidth) (round imageHeight) dpi blackColor $ do
     drawText font (imageWidth / 2) (imageHeight / 2 - textHeight / 2) textHeight whiteColor pageTitle
